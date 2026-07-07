@@ -17,10 +17,32 @@ class SAModel(nn.Module):
         super().__init__()
         self.device = device
         self.generator = torch.Generator(device=device)
+        self.comm_logit = nn.Parameter(torch.tensor(0.0, device=device))
+        self.learn_communication = False
 
     def manual_seed(self, seed: int) -> None:
         self.generator = torch.Generator(device=self.device)
         self.generator.manual_seed(seed)
+
+    def set_communication_probability(self, c: float) -> None:
+        c = torch.tensor(c, dtype=torch.float32, device=self.device).clamp(1e-6, 1 - 1e-6)
+        with torch.no_grad():
+            self.comm_logit.copy_(torch.logit(c))
+        self.learn_communication = True
+
+    def communication_probability(self, default: float = 0.0) -> torch.Tensor:
+        if self.learn_communication:
+            return torch.sigmoid(self.comm_logit)
+        return torch.tensor(default, dtype=torch.float32, device=self.device)
+
+    def communication_log_prob(
+        self, decisions: torch.Tensor, default: float = 0.0
+    ) -> torch.Tensor:
+        if not self.learn_communication:
+            return torch.zeros_like(decisions, dtype=torch.float32)
+        p = self.communication_probability(default).clamp(1e-6, 1 - 1e-6)
+        decisions = decisions.bool()
+        return torch.where(decisions, torch.log(p), torch.log1p(-p)).to(decisions.device)
 
     def get_logits(self, state: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError

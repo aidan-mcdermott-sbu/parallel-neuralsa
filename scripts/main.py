@@ -103,6 +103,18 @@ def train_ppo(actor, critic, actor_opt, critic_opt, problem, init_x, cfg):
     ppo(actor, critic, replay, actor_opt, critic_opt, cfg)
 
 
+def replicate_params_for_chains(params, n_chains):
+    if n_chains <= 1:
+        return params
+    return {k: v.repeat_interleave(n_chains, dim=0) for k, v in params.items()}
+
+
+def get_result_objective(results, reward):
+    if reward == "immediate":
+        return results["ngain"]
+    return results[reward]
+
+
 cs = ConfigStore.instance()
 cs.store(name="base_config", node=NeuralSAExperiment, group="experiment")
 
@@ -142,6 +154,7 @@ def main(cfg: NeuralSAExperiment) -> None:
     else:
         raise ValueError("Invalid problem name.")
 
+    actor.set_communication_probability(cfg.sa.c)
     problem.manual_seed(cfg.seed)
 
     # Optimizer and scheduler setup
@@ -198,8 +211,15 @@ def main(cfg: NeuralSAExperiment) -> None:
     # Training loop
     with tqdm(range(cfg.training.n_epochs)) as t:
         for i in t:
+            problem.n_problems = cfg.n_problems
+            if cfg.problem == "knapsack" and cfg.capacity is not None:
+                problem.capacity = cfg.capacity * torch.ones((cfg.n_problems, 1), device=cfg.device)
+
             params = problem.generate_params()
             params = {k: v.to(cfg.device) for k, v in params.items()}
+            n_chains = getattr(cfg.sa, "n_chains", 1)
+            params = replicate_params_for_chains(params, n_chains)
+            problem.n_problems = cfg.n_problems * n_chains
             problem.set_params(**params)
             init_x = problem.generate_init_x()
             actor.manual_seed(cfg.seed)
@@ -207,7 +227,7 @@ def main(cfg: NeuralSAExperiment) -> None:
             if cfg.training.method == "ppo":
                 train_ppo(actor, critic, actor_opt, critic_opt, problem, init_x, cfg)
                 train_out = sa(actor, problem, init_x, cfg, replay=None, baseline=False, greedy=False)
-                train_loss = torch.mean(train_out[cfg.training.reward])
+                train_loss = torch.mean(get_result_objective(train_out, cfg.training.reward))
                 # Append PPO log
                 with open(log_file, 'a', newline='') as f:
                     writer = csv.writer(f)

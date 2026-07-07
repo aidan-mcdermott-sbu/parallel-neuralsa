@@ -36,6 +36,8 @@ class SAConfig:
     outer_steps: int = 40  # number of steps at which temperature changes
     inner_steps: int = 1   # number of steps at a specific temperature
     alpha: float = MISSING  # will be set in main.py as a function of init/stop temps
+    c: float = 0.0  # probability that the leader triggers chain communication
+    n_chains: int = 5  # number of parallel chains per problem instance
 
 
 @dataclass

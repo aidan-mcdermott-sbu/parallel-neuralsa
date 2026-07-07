@@ -116,6 +116,8 @@ def sa(
                 logits = actor.get_logits(state, action)
                 distributions.append(logits)
                 actions.append(action)
+            comm_decisions = torch.zeros(cost.shape, dtype=torch.bool, device=device)
+            comm_log_probs = torch.zeros(cost.shape, dtype=torch.float32, device=device)
 
             # Compute proposal
             x, spec, _ = problem.from_state(state)
@@ -129,7 +131,6 @@ def sa(
             p_acceptance = p_accept(gain, temp)
             u = torch.rand(p_acceptance.shape, device=device)
             accept = 1 * (u < p_acceptance)
-            realized_gain = gain * accept
 
             # Records
             n_acc += accept
@@ -138,16 +139,72 @@ def sa(
                 acceptance.append(accept)
 
             # Update state and cost
+            prev_cost = cost
             cost = accept * proposal_cost + (1 - accept) * cost
             accept = extend_to(accept, x)
             next_x = accept * proposal + (1 - accept) * x
+
+            # Communication step: each contiguous group solves one shared problem.
+            n_chains = getattr(cfg.sa, "n_chains", 1)
+            c_prob = actor.communication_probability(getattr(cfg.sa, "c", 0.0))
+            communication_enabled = (
+                n_chains > 1
+                and (
+                    getattr(actor, "learn_communication", False)
+                    or getattr(cfg.sa, "c", 0.0) > 0.0
+                )
+            )
+            if communication_enabled:
+                if cost.size(0) % n_chains != 0:
+                    raise ValueError(
+                        "Batch size must be divisible by cfg.sa.n_chains for grouped communication."
+                    )
+
+                n_groups = cost.size(0) // n_chains
+                cost_g = cost.view(n_groups, n_chains)
+                next_x_g = next_x.view(n_groups, n_chains, *next_x.shape[1:])
+
+                weights = torch.softmax(-cost_g / temp, dim=1)
+
+                bad = torch.isnan(weights).any(dim=1) | torch.isinf(weights).any(dim=1)
+                if bad.any():
+                    best_chain = torch.argmin(cost_g, dim=1)
+                    fallback = torch.zeros_like(weights)
+                    fallback.scatter_(1, best_chain.unsqueeze(1), 1.0)
+                    weights = torch.where(bad.unsqueeze(1), fallback, weights)
+
+                leader_decides = torch.rand(n_groups, device=device) < c_prob
+                comm_decisions = leader_decides.repeat_interleave(n_chains)
+                comm_log_probs = actor.communication_log_prob(
+                    comm_decisions, getattr(cfg.sa, "c", 0.0)
+                )
+                sampled = torch.multinomial(weights, num_samples=n_chains, replacement=True)
+
+                new_cost_g = torch.gather(cost_g, 1, sampled)
+                idx_x = sampled.view(n_groups, n_chains, *([1] * (next_x_g.dim() - 2)))
+                idx_x = idx_x.expand_as(next_x_g)
+                new_next_x_g = torch.gather(next_x_g, 1, idx_x)
+
+                mask = leader_decides.view(n_groups, 1)
+                cost_g = torch.where(mask, new_cost_g, cost_g)
+                mask_x = mask.view(n_groups, 1, *([1] * (next_x_g.dim() - 2))).expand_as(
+                    next_x_g
+                )
+                next_x_g = torch.where(mask_x, new_next_x_g, next_x_g)
+
+                cost = cost_g.reshape(-1)
+                next_x = next_x_g.reshape(-1, *next_x.shape[1:])
+
+            realized_gain = prev_cost - cost
+            if old_log_probs is not None:
+                old_log_probs = old_log_probs + comm_log_probs
 
             # Update archive
             if record_state:
                 costs.append(cost)
             new_best = 1 * (cost < min_cost)
             new_best = extend_to(new_best, x)
-            best_x = new_best * x + (1 - new_best) * best_x
+            best_x = new_best * next_x + (1 - new_best) * best_x
             min_cost = torch.minimum(cost, min_cost)
             primal = primal + min_cost
 
@@ -174,7 +231,15 @@ def sa(
                     raise NotImplementedError
 
             if replay is not None:
-                replay.push(state, action, next_state, reward, old_log_probs, cfg.training.gamma)
+                replay.push(
+                    state,
+                    action,
+                    next_state,
+                    reward,
+                    old_log_probs,
+                    comm_decisions,
+                    cfg.training.gamma,
+                )
 
         # Reset state and temperature
         state = next_state.clone()

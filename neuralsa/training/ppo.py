@@ -47,7 +47,6 @@ def ppo(
     trace_decay = cfg.training.trace_decay
     eps_clip = cfg.training.eps_clip
     batch_size = cfg.training.batch_size
-    n_problems = cfg.n_problems
     problem_dim = cfg.problem_dim
     device = cfg.device
 
@@ -59,10 +58,12 @@ def ppo(
         nt = len(transitions)
         # Gather transition information into tensors
         batch = Transition(*zip(*transitions))
+        n_problems = batch.state[0].size(0)
         state = torch.stack(batch.state).view(nt * n_problems, problem_dim, -1)
         action = torch.stack(batch.action).detach().view(nt * n_problems, -1)
         next_state = torch.stack(batch.next_state).detach().view(nt * n_problems, problem_dim, -1)
         old_log_probs = torch.stack(batch.old_log_probs).view(nt * n_problems, -1)
+        comm_decisions = torch.stack(batch.comm_decisions).view(nt * n_problems, -1)
         # Evaluate the critic
         state_values = critic(state).view(nt, n_problems, 1)
         next_state_values = critic(next_state).view(nt, n_problems, 1)
@@ -103,6 +104,7 @@ def ppo(
             rewards_to_go = rewards_to_go[perm, :].clone()
             advantages = advantages[perm, :].clone()
             old_log_probs = old_log_probs[perm, :].clone()
+            comm_decisions = comm_decisions[perm, :].clone()
             # Run batch optimization
             for j in range(nt * n_problems, 0, -batch_size):
                 nb = min(j, batch_size)
@@ -116,10 +118,14 @@ def ppo(
                 batch_advantages = advantages[batch_idx, 0]
                 batch_rewards_to_go = rewards_to_go[batch_idx, 0]
                 batch_old_log_probs = old_log_probs[batch_idx, 0]
+                batch_comm_decisions = comm_decisions[batch_idx, 0]
                 # Evaluate the critic
                 batch_state_values = critic(batch_state)
                 # Evaluate the actor
                 batch_log_probs = actor.evaluate(batch_state, batch_action)
+                batch_log_probs = batch_log_probs + actor.communication_log_prob(
+                    batch_comm_decisions, getattr(cfg.sa, "c", 0.0)
+                )
                 # Compute critic loss
                 critic_loss = 0.5 * criterion(
                     batch_state_values.squeeze(), batch_rewards_to_go.detach()
