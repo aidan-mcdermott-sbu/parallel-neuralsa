@@ -122,7 +122,10 @@ def ppo(
                 # Evaluate the critic
                 batch_state_values = critic(batch_state)
                 # Evaluate the actor
-                batch_log_probs = actor.evaluate(batch_state, batch_action)
+                if getattr(cfg.training, "learn_policy", True):
+                    batch_log_probs = actor.evaluate(batch_state, batch_action)
+                else:
+                    batch_log_probs = torch.zeros_like(batch_old_log_probs)
                 batch_log_probs = batch_log_probs + actor.communication_log_prob(
                     batch_comm_decisions, getattr(cfg.sa, "c", 0.0)
                 )
@@ -136,8 +139,10 @@ def ppo(
                 surr2 = torch.clamp(ratios, 1 - eps_clip, 1 + eps_clip) * batch_advantages.detach()
                 actor_loss = -torch.min(surr1, surr2).mean()
                 # Optimize
-                actor_loss.backward()
+                if actor_loss.requires_grad:
+                    actor_loss.backward()
                 critic_loss.backward()
-                actor_opt.step()
+                if actor_loss.requires_grad:
+                    actor_opt.step()
                 critic_opt.step()
     return actor_loss.item(), critic_loss.item()

@@ -12,6 +12,7 @@ from omegaconf import MISSING
 class TrainingConfig:
     method: str = "ppo"
     reward: str = "immediate"
+    learn_policy: bool = True
     n_epochs: int = 100
     lr: float = 0.0002  # learning rate
     batch_size: int = 1024
@@ -37,6 +38,7 @@ class SAConfig:
     inner_steps: int = 1   # number of steps at a specific temperature
     alpha: float = MISSING  # will be set in main.py as a function of init/stop temps
     c: float = 0.0  # probability that the leader triggers chain communication
+    learn_c: bool = True
     n_chains: int = 5  # number of parallel chains per problem instance
 
 

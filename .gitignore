@@ -10,3 +10,4 @@ outputs/smoke/
 outputs/smoke_ppo/
 outputs/smoke_learn_c_es/
 outputs/smoke_learn_c_ppo/
+outputs/four_combos*/

@@ -154,7 +154,8 @@ def main(cfg: NeuralSAExperiment) -> None:
     else:
         raise ValueError("Invalid problem name.")
 
-    actor.set_communication_probability(cfg.sa.c)
+    if getattr(cfg.sa, "learn_c", True):
+        actor.set_communication_probability(cfg.sa.c)
     problem.manual_seed(cfg.seed)
 
     # Optimizer and scheduler setup
@@ -180,7 +181,9 @@ def main(cfg: NeuralSAExperiment) -> None:
         if not os.path.exists(log_file):
             with open(log_file, 'w', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow(["optimizer", "epoch", "train_loss"]);
+                writer.writerow(
+                    ["optimizer", "epoch", "train_loss", "learn_policy", "learn_c", "comm_prob"]
+                );
     elif cfg.training.method == "es":
         # Use unified get_optimizer for ES too
         optimizer = get_optimizer(
@@ -231,7 +234,14 @@ def main(cfg: NeuralSAExperiment) -> None:
                 # Append PPO log
                 with open(log_file, 'a', newline='') as f:
                     writer = csv.writer(f)
-                    writer.writerow([cfg.training.optimizer, i+1, train_loss.item()])
+                    writer.writerow([
+                        cfg.training.optimizer,
+                        i+1,
+                        train_loss.item(),
+                        cfg.training.learn_policy,
+                        cfg.sa.learn_c,
+                        actor.communication_probability(cfg.sa.c).item(),
+                    ])
             elif cfg.training.method == "es":
                 train_loss = train_es(actor, problem, init_x, es, cfg, i, es_log_writer)
                 scheduler.step()

@@ -106,7 +106,8 @@ def sa(
                 states.append(state)
 
             # Evaluate the actor and sample an action.
-            if baseline:
+            use_baseline = baseline or not getattr(cfg.training, "learn_policy", True)
+            if use_baseline:
                 action, old_log_probs = actor.baseline_sample(
                     state, random_std=random_std, problem=problem
                 )
@@ -196,7 +197,9 @@ def sa(
                 next_x = next_x_g.reshape(-1, *next_x.shape[1:])
 
             realized_gain = prev_cost - cost
-            if old_log_probs is not None:
+            if old_log_probs is None:
+                old_log_probs = comm_log_probs
+            else:
                 old_log_probs = old_log_probs + comm_log_probs
 
             # Update archive
