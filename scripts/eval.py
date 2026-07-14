@@ -16,6 +16,7 @@ from neuralsa.configs import NeuralSAExperiment
 from neuralsa.model import BinPackingActor, KnapsackActor, TSPActor
 from neuralsa.problem import TSP, BinPacking, Knapsack
 from neuralsa.sa import sa
+from neuralsa.utils import replicate_params_for_chains
 
 # For reproducibility on GPU
 torch.backends.cudnn.deterministic = True
@@ -53,13 +54,15 @@ def main(cfg: NeuralSAExperiment) -> None:
                 cfg.capacity = 25
             else:
                 cfg.capacity = cfg.problem_dim / 8
-        problem = Knapsack(cfg.problem_dim, device=cfg.device, params={"capacity": cfg.capacity})
+        problem = Knapsack(
+            cfg.problem_dim, cfg.n_problems, device=cfg.device, params={"capacity": cfg.capacity}
+        )
         actor = KnapsackActor(cfg.embed_dim, device=cfg.device)
     elif cfg.problem == "binpacking":
-        problem = BinPacking(cfg.problem_dim, device=cfg.device)
+        problem = BinPacking(cfg.problem_dim, cfg.n_problems, device=cfg.device)
         actor = BinPackingActor(cfg.embed_dim, device=cfg.device)
     elif cfg.problem == "tsp":
-        problem = TSP(cfg.problem_dim, device=cfg.device)
+        problem = TSP(cfg.problem_dim, cfg.n_problems, device=cfg.device)
         actor = TSPActor(cfg.embed_dim, device=cfg.device)
     else:
         raise ValueError("Invalid problem name.")
@@ -86,13 +89,17 @@ def main(cfg: NeuralSAExperiment) -> None:
         cfg.n_problems = 10000  # These datasets have 10K instances
         coords = torch.tensor(tsp_test, device=cfg.device)
         problem = TSP(cfg.problem_dim, cfg.n_problems, device=cfg.device)
-        problem.set_params(coords=coords)
+        params = {"coords": coords}
 
     else:
         # Create random instances
         params = problem.generate_params(mode="test")
         params = {k: v.to(cfg.device) for k, v in params.items()}
-        problem.set_params(**params)
+
+    n_chains = getattr(cfg.sa, "n_chains", 1)
+    params = replicate_params_for_chains(params, n_chains)
+    problem.n_problems = cfg.n_problems * n_chains
+    problem.set_params(**params)
 
     # Create accumulators
     # Store the minimum cost of each problem

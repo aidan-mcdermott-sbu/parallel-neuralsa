@@ -23,6 +23,21 @@ def repeat_to(tensor1: torch.Tensor, tensor2: torch.Tensor) -> torch.Tensor:
     return tensor1 * ones
 
 
+def replicate_params_for_chains(params: dict, n_chains: int) -> dict:
+    """
+    Replicate each problem's parameters for a group of processors/chains.
+
+    The output ordering is [problem_0 chain_0, ..., problem_0 chain_n,
+    problem_1 chain_0, ...], so each contiguous chain group receives the
+    same problem instance.
+    """
+    if n_chains < 1:
+        raise ValueError("n_chains must be >= 1")
+    if n_chains == 1:
+        return params
+    return {k: v.repeat_interleave(n_chains, dim=0) for k, v in params.items()}
+
+
 def to_numpy(tensor: torch.Tensor) -> np.ndarray:
     """Convert torch tensor to numpy array."""
     return tensor.detach().cpu().numpy()

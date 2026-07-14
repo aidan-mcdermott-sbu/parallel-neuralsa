@@ -1,0 +1,37 @@
+# Edit this file to change the four-combo knapsack experiment.
+# The runner reads these values and launches scripts/main.py once per combo.
+
+experiment: knapsack_ppo
+output_root: ./outputs/four_combos_from_file
+
+problem:
+  device: cpu
+  n_problems: 16
+  problem_dim: 50
+  embed_dim: 16
+  capacity: 12.5
+
+training:
+  n_epochs: 50
+  ppo_epochs: 2
+  batch_size: 32
+
+sa:
+  outer_steps: 250
+  inner_steps: 1
+  c: 0.1
+  n_chains: 5
+
+combos:
+  - name: learn_pi_learn_c
+    learn_policy: true
+    learn_c: true
+  - name: no_pi_learn_c
+    learn_policy: false
+    learn_c: true
+  - name: learn_pi_no_c
+    learn_policy: true
+    learn_c: false
+  - name: no_pi_no_c
+    learn_policy: false
+    learn_c: false

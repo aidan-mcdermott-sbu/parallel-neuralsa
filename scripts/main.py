@@ -27,6 +27,7 @@ from neuralsa.sa import sa
 from neuralsa.training import EvolutionStrategies
 from neuralsa.training.ppo import ppo
 from neuralsa.training.replay import Replay
+from neuralsa.utils import replicate_params_for_chains
 
 # For reproducibility on GPU
 torch.backends.cudnn.deterministic = True
@@ -101,12 +102,6 @@ def train_ppo(actor, critic, actor_opt, critic_opt, problem, init_x, cfg):
     replay = Replay(cfg.sa.outer_steps * cfg.sa.inner_steps)
     sa(actor, problem, init_x, cfg, replay=replay, baseline=False, greedy=False)
     ppo(actor, critic, replay, actor_opt, critic_opt, cfg)
-
-
-def replicate_params_for_chains(params, n_chains):
-    if n_chains <= 1:
-        return params
-    return {k: v.repeat_interleave(n_chains, dim=0) for k, v in params.items()}
 
 
 def get_result_objective(results, reward):

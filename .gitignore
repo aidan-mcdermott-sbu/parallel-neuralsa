@@ -6,8 +6,5 @@ __pycache__/
 models/
 optimizer_comparison.csv
 outputs/es_train_log.csv
-outputs/smoke/
-outputs/smoke_ppo/
-outputs/smoke_learn_c_es/
-outputs/smoke_learn_c_ppo/
+outputs/smoke*/
 outputs/four_combos*/
