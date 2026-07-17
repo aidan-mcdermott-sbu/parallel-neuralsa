@@ -1,4 +1,5 @@
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -37,6 +38,8 @@ def main():
     common.append("hydra.job.chdir=True")
 
     output_root = cfg["output_root"]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(repo_root) + os.pathsep + env.get("PYTHONPATH", "")
     for combo in cfg["combos"]:
         print(f"=== RUN {combo['name']} ===", flush=True)
         overrides = common + [
@@ -45,8 +48,9 @@ def main():
             f"hydra.run.dir={output_root}/{combo['name']}",
         ]
         subprocess.run(
-            [sys.executable, "scripts/main.py", *overrides],
+            [sys.executable, "-m", "scripts.main", *overrides],
             cwd=repo_root,
+            env=env,
             check=True,
         )
 
