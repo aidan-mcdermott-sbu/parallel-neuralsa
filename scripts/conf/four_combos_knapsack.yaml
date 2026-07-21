@@ -1,8 +1,8 @@
-# Edit this file to change the four-combo knapsack experiment.
+# Edit this file to change the Learning PI / C comparison knapsack experiment.
 # The runner reads these values and launches scripts/main.py once per combo.
 
 experiment: knapsack_ppo
-output_root: ./outputs/four_combos_from_file
+output_root: ./outputs/learn_pi_c_comparison
 
 problem:
   device: cpu
@@ -26,12 +26,6 @@ combos:
   - name: learn_pi_learn_c
     learn_policy: true
     learn_c: true
-  - name: no_pi_learn_c
-    learn_policy: false
-    learn_c: true
   - name: learn_pi_no_c
     learn_policy: true
-    learn_c: false
-  - name: no_pi_no_c
-    learn_policy: false
     learn_c: false
