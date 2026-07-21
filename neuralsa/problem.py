@@ -329,13 +329,19 @@ class BinPacking(Problem):
 class TSP(Problem):
     x_dim = 1
 
-    def __init__(self, dim: int = 50, n_problems: int = 256, device: str = "cpu", params: str = {}):
-        """Initialize BinPacking.
+    def __init__(
+        self,
+        dim: int = 50,
+        n_problems: int = 256,
+        device: str = "cpu",
+        params: Dict[str, torch.Tensor] = {},
+    ):
+        """Initialize a batch of Euclidean TSP instances.
 
         Args:
-            dim: num items
+            dim: number of cities
             n_problems: batch size
-            params: {'weight': torch.Tensor}
+            params: {'coords': torch.Tensor}
         """
         super().__init__(device)
         self.dim = dim
@@ -374,20 +380,20 @@ class TSP(Problem):
         return torch.sum(edge_lengths, -1)
 
     def update(self, s: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
-        """Silly city swap for now
+        """Apply a 2-opt move by reversing the section between two tour positions.
 
         Args:
-            s: perm vector [batch size, coords]
-            a: cities to swap ([batch size], [batch size])
+            s: permutation vector [batch size, dim, 1]
+            a: two tour positions [batch size, 2]
         """
         return self.two_opt(s[..., 0], a)[..., None]
 
     def two_opt(self, x: torch.Tensor, a: torch.Tensor):
-        """Swap cities a[0] <-> a[1].
+        """Reverse the contiguous tour segment between two selected positions.
 
         Args:
-            s: perm vector [batch size, coords]
-            a: cities to swap ([batch size], [batch size])
+            x: permutation vector [batch size, dim]
+            a: two tour positions [batch size, 2]
         """
         # Two-opt moves invert a section of a tour. If we cut a tour into
         # segments a and b then we can choose to invert either a or b. Due
@@ -395,11 +401,12 @@ class TSP(Problem):
         # the segment that is stored contiguously.
         l = torch.minimum(a[:, 0], a[:, 1])
         r = torch.maximum(a[:, 0], a[:, 1])
-        ones = torch.ones((self.n_problems, 1), dtype=torch.long, device=self.device)
-        fidx = torch.arange(self.dim, device=self.device) * ones
+        batch_size = x.shape[0]
+        ones = torch.ones((batch_size, 1), dtype=torch.long, device=x.device)
+        fidx = torch.arange(self.dim, device=x.device) * ones
         # Reversed indices
         offset = l + r - 1
-        ridx = torch.arange(0, -self.dim, -1, device=self.device) + offset[:, None]
+        ridx = torch.arange(0, -self.dim, -1, device=x.device) + offset[:, None]
         # Set flipped section to all True
         flip = torch.ge(fidx, l[:, None]) * torch.lt(fidx, r[:, None])
         # Set indices to replace flipped section with
@@ -424,7 +431,7 @@ class TSP(Problem):
             ],
             dim=0,
         ).to(self.device)
-        return perm[..., None]
+        return perm[..., None].float()
 
     def generate_init_state(self) -> torch.Tensor:
         """State encoding has dims

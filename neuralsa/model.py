@@ -480,7 +480,7 @@ class TSPActor(SAModel):
 
         # Second city encoding: [base.prev, base, base.next,
         #                        target.prev, target, target.next]
-        arange = torch.arange(n_problems)
+        arange = torch.arange(n_problems, device=state.device)
         c1_coords = coords[arange, c1]
         c1_prev_coords = coords[arange, c1_prev]
         c1_next_coords = coords[arange, c1_next]
@@ -509,7 +509,7 @@ class TSPActor(SAModel):
         # Compute mask and sample c2
         c1_prev = (c1 - 1) % problem_dim
         c1_next = (c1 + 1) % problem_dim
-        arange = torch.arange(n_problems)
+        arange = torch.arange(n_problems, device=state.device)
         logits[arange, c1] = -float("inf")
         logits[arange, c1_prev] = -float("inf")
         logits[arange, c1_next] = -float("inf")
@@ -540,7 +540,7 @@ class TSPActor(SAModel):
 
         # Second city encoding: [base.prev, base, base.next,
         #                        target.prev, target, target.next]
-        arange = torch.arange(n_problems)
+        arange = torch.arange(n_problems, device=state.device)
         c1_coords = coords[arange, c1]
         c1_prev_coords = coords[arange, c1_prev]
         c1_next_coords = coords[arange, c1_next]
@@ -584,7 +584,7 @@ class TSPActor(SAModel):
 
         # Second city encoding: [base.prev, base, base.next,
         #                        target.prev, target, target.next]
-        arange = torch.arange(n_problems)
+        arange = torch.arange(n_problems, device=state.device)
         c1_coords = coords[arange, c1]
         c1_prev_coords = coords[arange, c1_prev]
         c1_next_coords = coords[arange, c1_next]
