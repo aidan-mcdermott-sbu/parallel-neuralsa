@@ -12,12 +12,12 @@ problem:
   capacity: 12.5
 
 training:
-  n_epochs: 20
+  n_epochs: 40
   ppo_epochs: 2
   batch_size: 32
 
 sa:
-  outer_steps: 200
+  outer_steps: 1000
   inner_steps: 1
   c: 0.1
   n_chains: 5
