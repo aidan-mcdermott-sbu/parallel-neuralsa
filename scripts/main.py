@@ -33,6 +33,43 @@ from neuralsa.utils import replicate_params_for_chains
 torch.backends.cudnn.deterministic = True
 
 
+PPO_LOG_FIELDS = [
+    "optimizer",
+    "epoch",
+    "train_loss",
+    "learn_policy",
+    "learn_c",
+    "comm_prob",
+    "knapsack_value",
+    "knapsack_weight",
+    "knapsack_feasible_rate",
+    "knapsack_best_group_value",
+]
+
+
+def get_knapsack_metrics(problem, best_x, n_chains):
+    if not isinstance(problem, Knapsack):
+        return "", "", "", ""
+
+    selected = best_x[..., 0]
+    value = torch.sum(problem.values * selected, dim=-1)
+    weight = torch.sum(problem.weights * selected, dim=-1)
+    feasible = weight < problem.capacity[..., 0]
+    feasible_value = torch.where(feasible, value, torch.zeros_like(value))
+
+    if n_chains > 1 and feasible_value.numel() % n_chains == 0:
+        best_group_value = feasible_value.view(-1, n_chains).max(dim=1).values.mean()
+    else:
+        best_group_value = feasible_value.mean()
+
+    return (
+        feasible_value.mean().item(),
+        weight.mean().item(),
+        feasible.float().mean().item(),
+        best_group_value.item(),
+    )
+
+
 def create_folder(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
@@ -176,9 +213,7 @@ def main(cfg: NeuralSAExperiment) -> None:
         if not os.path.exists(log_file):
             with open(log_file, 'w', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow(
-                    ["optimizer", "epoch", "train_loss", "learn_policy", "learn_c", "comm_prob"]
-                );
+                writer.writerow(PPO_LOG_FIELDS)
     elif cfg.training.method == "es":
         # Use unified get_optimizer for ES too
         optimizer = get_optimizer(
@@ -226,6 +261,7 @@ def main(cfg: NeuralSAExperiment) -> None:
                 train_ppo(actor, critic, actor_opt, critic_opt, problem, init_x, cfg)
                 train_out = sa(actor, problem, init_x, cfg, replay=None, baseline=False, greedy=False)
                 train_loss = torch.mean(get_result_objective(train_out, cfg.training.reward))
+                knapsack_metrics = get_knapsack_metrics(problem, train_out["best_x"], n_chains)
                 # Append PPO log
                 with open(log_file, 'a', newline='') as f:
                     writer = csv.writer(f)
@@ -236,6 +272,7 @@ def main(cfg: NeuralSAExperiment) -> None:
                         cfg.training.learn_policy,
                         cfg.sa.learn_c,
                         actor.communication_probability(cfg.sa.c).item(),
+                        *knapsack_metrics,
                     ])
             elif cfg.training.method == "es":
                 train_loss = train_es(actor, problem, init_x, es, cfg, i, es_log_writer)
