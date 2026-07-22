@@ -17,7 +17,7 @@ training:
   batch_size: 32
 
 sa:
-  outer_steps: 1000
+  outer_steps: 200
   inner_steps: 1
   c: 0.1
   n_chains: 5
