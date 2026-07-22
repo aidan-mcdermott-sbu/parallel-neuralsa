@@ -19,7 +19,7 @@ training:
 sa:
   outer_steps: 200
   inner_steps: 1
-  c: 0.1
+  c: 0.01
   n_chains: 5
 
 combos:
